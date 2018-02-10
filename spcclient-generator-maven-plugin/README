@@ -11,10 +11,13 @@ Spring Cloud 客户端生成器，生成的客户端项目，让Spring Cloud微�
 1.默认扫描名为groupId参数值的包及其子包下面的Controller和DTO，可以自定义包名
 2.相同路径下原有的同名文件将会被覆盖
 
+使用案例：
+https://github.com/damingzms/test/tree/master/test-spring-boot
+
 
 还在不断完善中。。。
 1、配置pom的distributionManagement
-2、DTO常量属性初始化，只支持原始类型、包装类和String
+2、DTO常量属性初始化，只支持原始类型、包装类和String、Enum
 3、非@RequestBody修饰的参数，暂不支持自定义的引用类型的属性。可以使用限定路径的方式，比如Role类有User类型的属性user，User类有属性name，那么可以将以下参数“user.name=*”，放置到form或者URL参数中
 4、客户端在调用时使用反射获取URL和参数数据，会有一定性能损耗，可以增加缓存机制，或者建立数据模型，在生成客户端时就把需要的数据抽取出来
 5、Transformer中切面（Aspect）的切入点（Pointcut）包名，有极少的可能性会跟Spring消费者项目（Consumer）包名冲突
