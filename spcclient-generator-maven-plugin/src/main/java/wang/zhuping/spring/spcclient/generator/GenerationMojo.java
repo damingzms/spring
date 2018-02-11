@@ -599,7 +599,7 @@ public class GenerationMojo extends AbstractMojo {
 		Map<String, Object> root = new HashMap<>();
 		root.put("groupId", groupId);
 		root.put("artifactId", artifactId);
-		root.put("version", version + 11);
+		root.put("version", version);
 		outputFileFromTemplate(baseDirFile, TemplateUtils.TEMPLATE_NAME_POM, root);
 	}
 
