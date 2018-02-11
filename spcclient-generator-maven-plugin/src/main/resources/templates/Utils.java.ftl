@@ -7,6 +7,9 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 public final class Utils {
 
 	public static Map<String, Object> bean2Map(Object obj) throws Exception {
@@ -22,6 +25,12 @@ public final class Utils {
 			}
 		}
 		return map;
+	}
+
+	private static final ObjectMapper MAPPER = new ObjectMapper();
+	
+	public static String toJson(Object o) throws JsonProcessingException {
+		return MAPPER.writeValueAsString(o);
 	}
 
 }

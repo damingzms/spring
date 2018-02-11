@@ -39,6 +39,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.stereotype.Service;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.CollectionUtils;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -272,6 +273,7 @@ public class GenerationMojo extends AbstractMojo {
 								// service method parameter annotation
 								List<AnnotationSpec> parameterAnnotationSpecList = new ArrayList<>();
 								RequestBody requestBodyAnno = parameter.getAnnotation(RequestBody.class);
+								PathVariable pathVariableAnno = parameter.getAnnotation(PathVariable.class);
 								if (requestParamAnno != null) {
 									AnnotationSpec requestParamAnnoSpec = AnnotationSpec.get(requestParamAnno);
 									parameterAnnotationSpecList.add(requestParamAnnoSpec);
@@ -279,6 +281,10 @@ public class GenerationMojo extends AbstractMojo {
 								if (requestBodyAnno != null) {
 									AnnotationSpec requestBodyAnnoSpec = AnnotationSpec.get(requestBodyAnno);
 									parameterAnnotationSpecList.add(requestBodyAnnoSpec);
+								}
+								if (pathVariableAnno != null) {
+									AnnotationSpec pathVariableAnnoSpec = AnnotationSpec.get(pathVariableAnno);
+									parameterAnnotationSpecList.add(pathVariableAnnoSpec);
 								}
 								if (!parameterAnnotationSpecList.isEmpty()) {
 									parameterSpecBuilder.addAnnotations(parameterAnnotationSpecList);
