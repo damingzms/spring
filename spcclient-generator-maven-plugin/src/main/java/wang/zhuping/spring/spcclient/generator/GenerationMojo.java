@@ -44,6 +44,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.google.common.base.Defaults;
 import com.google.common.base.Predicate;
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ArrayTypeName;
@@ -92,18 +93,6 @@ public class GenerationMojo extends AbstractMojo {
 	 */
 	@Parameter(defaultValue = "${project.groupId}", required = true)
 	private String packagesToScan;
-	
-	/**
-	 * 是否生成pom.xml文件
-     */
-	@Parameter(defaultValue = "true", required = true)
-	public boolean generatingPom;
-	
-	/**
-	 * 是否生成DTO
-     */
-	@Parameter(defaultValue = "true", required = true)
-	private boolean generatingDto;
 	
 	/**
 	 * 客户端项目groupId
@@ -301,8 +290,10 @@ public class GenerationMojo extends AbstractMojo {
 						}
 
 						// service method code
-						if (returnType != void.class) {
-							methodSpecBuilder.addStatement("return null");
+						Class<?> returnClass = method.getReturnType();
+						if (returnClass != void.class) {
+							Object value = Defaults.defaultValue(returnClass);
+							methodSpecBuilder.addStatement("return $L", value);
 						}
 						
 						serviceTypeSpecBuilder.addMethod(methodSpecBuilder.build());
