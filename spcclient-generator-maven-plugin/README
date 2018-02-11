@@ -1,4 +1,27 @@
 Spring Cloud 客户端生成器，生成的客户端项目，让Spring Cloud微服务接口调用起来跟调用一个本地方法一样简单
+
+使用方法：
+Spring Web服务端项目加入以下配置
+	<plugin>
+		<groupId>wang.zhuping.spring</groupId>
+		<artifactId>spcclient-generator-maven-plugin</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+		<configuration>
+			<packagesToScan>{your controller & dto packages, or parent package}</packagesToScan>
+			{other configuration... please refer to 'global.hh.spring.spcclient.generator.GenerationMojo'}
+		</configuration>
+		<executions>
+			<execution>
+				<goals>
+					<goal>generate</goal>
+				</goals>
+			</execution>
+		</executions>
+	</plugin>
+
+使用案例：
+https://github.com/damingzms/test/tree/master/test-spring-boot
+	
 运行过程：
 生成DTO类文件
 生成Service类文件
@@ -10,9 +33,6 @@ Spring Cloud 客户端生成器，生成的客户端项目，让Spring Cloud微�
 注意：
 1.默认扫描名为groupId参数值的包及其子包下面的Controller和DTO，可以自定义包名
 2.相同路径下原有的同名文件将会被覆盖
-
-使用案例：
-https://github.com/damingzms/test/tree/master/test-spring-boot
 
 
 还在不断完善中。。。
