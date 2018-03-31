@@ -10,6 +10,11 @@ import java.util.Map;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+/**
+ * @company H&H Group
+ * @author <a href="mailto:zhangmingsen@hh.global">Samuel Zhang</a>
+ * @date 2018年2月11日 上午10:59:45
+ */
 public final class Utils {
 
 	public static Map<String, Object> bean2Map(Object obj) throws Exception {

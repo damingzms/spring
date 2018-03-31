@@ -1,4 +1,4 @@
-package wang.zhuping.spring.spcclient.generator;
+package global.hh.spring.spcclient.generator;
 
 import org.apache.commons.lang3.text.WordUtils;
 

@@ -1,4 +1,4 @@
-package wang.zhuping.spring.spcclient.generator;
+package global.hh.spring.spcclient.generator;
 
 import java.beans.BeanInfo;
 import java.beans.Introspector;

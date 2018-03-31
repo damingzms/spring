@@ -1,14 +1,15 @@
 Spring Cloud 客户端生成器，让Spring Cloud微服务接口调用起来跟调用一个本地方法一样简单
-1、服务端M烦冗aven插件，自动生成客户端
+1、服务端Maven插件，自动生成客户端
 2、客户端项目省去烦冗的URL拼接和参数拼装的工作，以调用本地接口的方式调用rest接口
 3、后面继续完善，添加服务发现、负载均衡等Spring Cloud特性
+4、生成的客户端与Finagle客户端结构相似，如果插件配置得当，原Finagle客户端项目，可以极少的改动迁移到接入Spring Cloud服务
 
 使用方法：
 Spring Web服务端项目加入以下配置
 	<plugin>
-		<groupId>wang.zhuping.spring</groupId>
+		<groupId>global.hh.spring</groupId>
 		<artifactId>spcclient-generator-maven-plugin</artifactId>
-		<version>0.0.1-SNAPSHOT</version>
+		<version>1.0.0-SNAPSHOT</version>
 		<configuration>
 			<packagesToScan>{your controller & dto packages, or parent package}</packagesToScan>
 			{other configuration... please refer to 'global.hh.spring.spcclient.generator.GenerationMojo'}
@@ -21,9 +22,6 @@ Spring Web服务端项目加入以下配置
 			</execution>
 		</executions>
 	</plugin>
-
-使用案例：
-https://github.com/damingzms/test/tree/master/test-spring-boot
 	
 运行过程：
 生成DTO类文件
@@ -38,7 +36,14 @@ https://github.com/damingzms/test/tree/master/test-spring-boot
 2.相同路径下原有的同名文件将会被覆盖
 
 
+遗留bug
+packagesToScan输入多个packages时，报错
+
+
 还在不断完善中。。。
+1.http.client配置，超时等
+2.服务发现、负载均衡、重试
+
 1、配置pom的distributionManagement
 2、DTO常量属性初始化，只支持原始类型、包装类和String、Enum
 3、非@RequestBody修饰的参数，暂不支持自定义的引用类型的属性。可以使用限定路径的方式，比如Role类有User类型的属性user，User类有属性name，那么可以将以下参数“user.name=*”，放置到form或者URL参数中

@@ -1,7 +1,12 @@
-package wang.zhuping.spring.spcclient.generator.util;
+package global.hh.spring.spcclient.generator.util;
 
 import java.io.File;
 
+/**
+ * @company H&H Group
+ * @author <a href="mailto:zhangmingsen@hh.global">Samuel Zhang</a>
+ * @date 2018年2月11日 上午10:59:45
+ */
 public class FileUtils {
 	
 	/**

@@ -1,8 +1,8 @@
-package wang.zhuping.spring.spcclient.generator;
+package global.hh.spring.spcclient.generator;
 
 import java.util.Map;
 
-import wang.zhuping.spring.spcclient.generator.bean.Bean;
+import global.hh.spring.spcclient.generator.bean.Bean;
 
 public class TestUtils {
 

@@ -1,4 +1,4 @@
-package wang.zhuping.spring.spcclient.generator.bean;
+package global.hh.spring.spcclient.generator.bean;
 
 public class Bean {
 

@@ -1,8 +1,13 @@
-package wang.zhuping.spring.spcclient.generator.util;
+package global.hh.spring.spcclient.generator.util;
 
 import freemarker.template.Configuration;
 import freemarker.template.TemplateExceptionHandler;
 
+/**
+ * @company H&H Group
+ * @author <a href="mailto:zhangmingsen@hh.global">Samuel Zhang</a>
+ * @date 2018年2月11日 上午10:59:57
+ */
 public final class TemplateUtils {
 	
 	public static final String TEMPLATE_NAME_POSTFIX = ".ftl";

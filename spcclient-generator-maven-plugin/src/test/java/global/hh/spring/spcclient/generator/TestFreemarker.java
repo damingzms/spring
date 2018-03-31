@@ -1,4 +1,4 @@
-package wang.zhuping.spring.spcclient.generator;
+package global.hh.spring.spcclient.generator;
 
 import java.io.OutputStreamWriter;
 import java.io.Writer;
@@ -7,7 +7,7 @@ import java.util.Map;
 
 import freemarker.template.Configuration;
 import freemarker.template.Template;
-import wang.zhuping.spring.spcclient.generator.util.TemplateUtils;
+import global.hh.spring.spcclient.generator.util.TemplateUtils;
 
 public class TestFreemarker {
 

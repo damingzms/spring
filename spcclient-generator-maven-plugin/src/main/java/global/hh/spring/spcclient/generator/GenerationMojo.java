@@ -1,4 +1,4 @@
-package wang.zhuping.spring.spcclient.generator;
+package global.hh.spring.spcclient.generator;
 
 import java.io.File;
 import java.io.OutputStreamWriter;
@@ -62,12 +62,18 @@ import com.squareup.javapoet.WildcardTypeName;
 import com.squareup.javapoet.TypeSpec.Builder;
 
 import freemarker.template.Template;
+import global.hh.spring.spcclient.generator.util.FileUtils;
+import global.hh.spring.spcclient.generator.util.TemplateUtils;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
-import wang.zhuping.spring.spcclient.generator.util.FileUtils;
-import wang.zhuping.spring.spcclient.generator.util.TemplateUtils;
 
+/**
+ * 插件会从项目代码编译输出目录搜索相关的类，所以需要在项目编译完成之后运行
+ * @company H&H Group
+ * @author <a href="mailto:zhangmingsen@hh.global">Samuel Zhang</a>
+ * @date 2018年2月11日 上午11:00:20
+ */
 @Mojo(name = "generate", defaultPhase = LifecyclePhase.PACKAGE)
 public class GenerationMojo extends AbstractMojo {
 
@@ -126,22 +132,22 @@ public class GenerationMojo extends AbstractMojo {
 	private String srcDir;
 	
 	/**
-	 * 生成DTO类目标包。generatingDto = true时才有效。Value中的“-”和“_”符号会替换成“.”
+	 * 基础包名。Value中的“-”和“_”符号会替换成“.”
      */
-	@Parameter(defaultValue = "${project.groupId}.${project.artifactId}.client.dto", required = true)
+	@Parameter(defaultValue = "${project.groupId}.${project.artifactId}.client", required = true)
+	private String basePkg;
+	
+	/**
+	 * 生成DTO类目标包。默认值：{basePkg}.dto
+     */
+	@Parameter
 	private String dtoPkg;
 	
 	/**
-	 * 生成service类目标包。Value中的“-”和“_”符号会替换成“.”
-     */
-	@Parameter(defaultValue = "${project.groupId}.${project.artifactId}.client.service", required = true)
-	private String servicePkg;
-	
-	/**
-	 * 生成factory类目标包。默认值：servicePkg的父级包
+	 * 生成service类目标包。默认值：{basePkg}.service
      */
 	@Parameter
-	private String factoryPkg;
+	private String servicePkg;
 	
 	/**
 	 * Value中的“-”和“_”符号会删除，单词首字母自动大写
@@ -149,20 +155,20 @@ public class GenerationMojo extends AbstractMojo {
 	@Parameter(defaultValue = "${project.artifactId}ServiceFactory", required = true)
 	private String factoryClassName;
 	
+	private File basePkgFile;
+	
 	private File baseDirFile;
 	
 	private File srcDirFile;
-	
-	private File factoryDirFile;
 	
 	public void execute() throws MojoExecutionException {
 		Log log = getLog();
 		log.info("Generating Spring Cloud client project.");
 		
 		// PREPARE
-		dtoPkg = dtoPkg.replaceAll("[-, _]", ".");
-		servicePkg = servicePkg.replaceAll("[-, _]", ".");
-		factoryPkg = servicePkg.substring(0, servicePkg.lastIndexOf('.'));
+		basePkg = basePkg.replaceAll("[-, _]", ".");
+		dtoPkg = basePkg + ".dto";
+		servicePkg = basePkg + ".service";
 		factoryClassName = WordUtils.capitalize(factoryClassName, '-', '_').replaceAll("[-, _]", "");
 		
 		try {
@@ -250,7 +256,8 @@ public class GenerationMojo extends AbstractMojo {
 						java.lang.reflect.Parameter[] parameters = method.getParameters();
 						if (parameters != null && parameters.length > 0) {
 							List<ParameterSpec> parameterSpecList = new ArrayList<>();
-							for (java.lang.reflect.Parameter parameter : parameters) {
+							for (int i = 0; i < parameters.length; i++) {
+								java.lang.reflect.Parameter parameter = parameters[i];
 								
 								// REQUEST DTO
 								Type parameterType = parameter.getParameterizedType();
@@ -264,6 +271,9 @@ public class GenerationMojo extends AbstractMojo {
 									if (StringUtils.isEmpty(name)) {
 										name = requestParamAnno.name();
 									}
+								}
+								if (i == 0) {
+									name = "request";
 								}
 								if (StringUtils.isEmpty(name)) {
 									name = parameter.getName();
@@ -345,7 +355,7 @@ public class GenerationMojo extends AbstractMojo {
 		srcDirFile = FileUtils.mkdirs(baseDirFile, srcDir);
 		FileUtils.mkdirs(srcDirFile, dtoPkg.replace('.', File.separatorChar));
 		FileUtils.mkdirs(srcDirFile, servicePkg.replace('.', File.separatorChar));
-		factoryDirFile = new File(srcDirFile, factoryPkg.replace('.', File.separatorChar));
+		basePkgFile = new File(srcDirFile, basePkg.replace('.', File.separatorChar));
 	}
 	
 	private TypeName genDtoJavaFile(Map<Class<?>, JavaFile> javaFileMap, Map<Class<?>, ClassName> classNameMap, Map<String, Integer> nameCountMap, Type type) throws Exception {
@@ -421,6 +431,15 @@ public class GenerationMojo extends AbstractMojo {
 			dtoName += dtoNameCount;
 		}
 		
+		// type parameter
+		List<TypeVariableName> typeVariables = new ArrayList<>();
+		TypeVariable<?>[] typeParameters = clazz.getTypeParameters();
+		if (typeParameters != null) {
+			for (TypeVariable<?> typeVariable : typeParameters) {
+				typeVariables.add(TypeVariableName.get(typeVariable));
+			}
+		}
+		
 		// type
 		ClassName className = ClassName.get(dtoPkg, dtoName);
 		classNameMap.put(clazz, className); // 此语句需要放到递归调用之前，否则互相嵌套的DTO类会出现死循环
@@ -432,7 +451,7 @@ public class GenerationMojo extends AbstractMojo {
 		} else {
 			dtoTypeSpecBuilder = TypeSpec.classBuilder(dtoName).addAnnotation(Getter.class).addAnnotation(Setter.class);
 		}
-		dtoTypeSpecBuilder.addModifiers(Modifier.PUBLIC);
+		dtoTypeSpecBuilder.addTypeVariables(typeVariables).addModifiers(Modifier.PUBLIC);
 		
 		// super type
 		Class<?>[] interfaces = clazz.getInterfaces();
@@ -549,11 +568,11 @@ public class GenerationMojo extends AbstractMojo {
 		
 		// factory interface
 		Map<String, Object> root = new HashMap<>();
-		root.put("package", factoryPkg);
-		outputFileFromTemplate(factoryDirFile, TemplateUtils.TEMPLATE_NAME_SERVICE_FACTORY, root);
+		root.put("package", basePkg);
+		outputFileFromTemplate(basePkgFile, TemplateUtils.TEMPLATE_NAME_SERVICE_FACTORY, root);
 		
 		// factory impl
-		ClassName interfaceClassName = ClassName.get(factoryPkg, "ServiceFactory");
+		ClassName interfaceClassName = ClassName.get(basePkg, "ServiceFactory");
 		Builder builder = TypeSpec.classBuilder(factoryClassName)
 				.addAnnotation(Getter.class)
 				.addAnnotation(Setter.class)
@@ -574,22 +593,22 @@ public class GenerationMojo extends AbstractMojo {
 			builder.addField(fieldSpecBuilder.build());
 		}
 		TypeSpec typeSpec = builder.build();
-		JavaFile javaFile = JavaFile.builder(factoryPkg, typeSpec).build();
+		JavaFile javaFile = JavaFile.builder(basePkg, typeSpec).build();
 		outputJavaFile(srcDirFile, javaFile);
 	}
 	
 	private void genUtil() throws Exception {
 		Map<String, Object> root = new HashMap<>();
-		root.put("package", factoryPkg);
-		outputFileFromTemplate(factoryDirFile, TemplateUtils.TEMPLATE_NAME_UTILS, root);
+		root.put("package", basePkg);
+		outputFileFromTemplate(basePkgFile, TemplateUtils.TEMPLATE_NAME_UTILS, root);
 	}
 	
 	private void genTransformer() throws Exception {
 		Map<String, Object> root = new HashMap<>();
-		root.put("package", factoryPkg);
+		root.put("package", basePkg);
 		root.put("dtoPackage", dtoPkg);
 		root.put("servicePackage", servicePkg);
-		outputFileFromTemplate(factoryDirFile, TemplateUtils.TEMPLATE_NAME_TRANSFORMER, root);
+		outputFileFromTemplate(basePkgFile, TemplateUtils.TEMPLATE_NAME_TRANSFORMER, root);
 	}
 	
 	private void genPom() throws Exception {

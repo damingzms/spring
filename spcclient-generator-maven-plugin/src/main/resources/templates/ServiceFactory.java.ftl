@@ -1,5 +1,10 @@
 package ${package};
 
+/**
+ * @company H&H Group
+ * @author <a href="mailto:zhangmingsen@hh.global">Samuel Zhang</a>
+ * @date 2018年2月11日 上午10:59:45
+ */
 public interface ServiceFactory {
 
 	public String getProtocol();

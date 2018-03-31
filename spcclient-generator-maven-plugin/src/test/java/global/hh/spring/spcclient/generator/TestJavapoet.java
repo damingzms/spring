@@ -1,4 +1,4 @@
-package wang.zhuping.spring.spcclient.generator;
+package global.hh.spring.spcclient.generator;
 
 import javax.lang.model.element.Modifier;
 
@@ -7,7 +7,7 @@ import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 
-import wang.zhuping.spring.spcclient.generator.bean.TestInterface;
+import global.hh.spring.spcclient.generator.bean.TestInterface;
 
 public class TestJavapoet {
 	

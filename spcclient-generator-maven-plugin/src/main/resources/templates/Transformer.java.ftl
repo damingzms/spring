@@ -35,6 +35,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+/**
+ * @company H&H Group
+ * @author <a href="mailto:zhangmingsen@hh.global">Samuel Zhang</a>
+ * @date 2018年2月11日 上午10:59:45
+ */
 @Aspect
 @Component
 public class Transformer {
@@ -144,7 +149,8 @@ public class Transformer {
 		}
 		UriComponentsBuilder builder = UriComponentsBuilder.newInstance()
 				.scheme(factory.getProtocol()).host(factory.getHost()).port(factory.getPort())
-				.pathSegment(pathList.toArray(new String[] {}));
+				.pathSegment(pathList.toArray(new String[] {}))
+				.path("/");
 		
 		// return type
 		Class<?> responseType = responseTypeCache.get(cacheKey);
@@ -244,4 +250,3 @@ public class Transformer {
 	}
 	
 }
-
