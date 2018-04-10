@@ -1,51 +1,64 @@
-Spring Cloud 客户端生成器，让Spring Cloud微服务接口调用起来跟调用一个本地方法一样简单
-1、服务端Maven插件，自动生成客户端
-2、客户端项目省去烦冗的URL拼接和参数拼装的工作，以调用本地接口的方式调用rest接口
-3、后面继续完善，添加服务发现、负载均衡等Spring Cloud特性
-4、生成的客户端与Finagle客户端结构相似，如果插件配置得当，原Finagle客户端项目，可以极少的改动迁移到接入Spring Cloud服务
+● 简介
+	Spring Cloud Client生成器，让Spring Web接口调用起来跟调用一个本地方法一样简单
+	1、服务端Maven插件，自动生成client
+	2、客户端项目省去烦冗的URL拼接和参数拼装的工作，以调用本地接口的方式调用rest接口
+	3、后面继续完善，添加服务发现、负载均衡等Spring Cloud特性
+	4、生成的client与Finagle client结构相似，如果插件配置得当，原Finagle客户端项目，可以极少的改动迁移到接入Spring Cloud服务
 
-使用方法：
-Spring Web服务端项目加入以下配置
-	<plugin>
-		<groupId>global.hh.spring</groupId>
-		<artifactId>spcclient-generator-maven-plugin</artifactId>
-		<version>1.0.0-SNAPSHOT</version>
-		<configuration>
-			<packagesToScan>{your controller & dto packages, or parent package}</packagesToScan>
-			{other configuration... please refer to 'global.hh.spring.spcclient.generator.GenerationMojo'}
-		</configuration>
-		<executions>
-			<execution>
-				<goals>
-					<goal>generate</goal>
-				</goals>
-			</execution>
-		</executions>
-	</plugin>
+● 使用步骤：
+	1、服务端项目pom.xml加入以下插件配置
+		<plugin>
+			<groupId>global.hh.spring</groupId>
+			<artifactId>spcclient-generator-maven-plugin</artifactId>
+			<version>2.0.0-SNAPSHOT</version>
+			<configuration>
+				<packagesToScan>{your controller & dto packages, or parent package}</packagesToScan>
+				{other configuration... please refer to 'global.hh.spring.spcclient.generator.GenerationMojo'}
+			</configuration>
+			<executions>
+				<execution>
+					<goals>
+						<goal>generate</goal>
+					</goals>
+				</execution>
+			</executions>
+		</plugin>
+	2、服务端项目注册服务工厂类（以交易快照为例）
+		@Bean
+		public TradeCaptureServiceFactory tradeCaptureServiceFactory() {
+			TradeCaptureServiceFactory factory = new TradeCaptureServiceFactory();
+			factory.setProtocol(**);
+			factory.setHost(**);
+			factory.setPort(**);
+			factory.setBasePath(**);
+			return factory;
+		}
+	3、业务代码
+		@Autowired
+		private TradeCaptureServiceFactory tradeCaptureServiceFactory;
+		
+		调用service方法，会自动转换成http请求
+		response = tradeCaptureServiceFactory.getCaptureCreationService().create(request);
+		
+● 服务端Maven插件运行过程：
+	1、扫描服务端Controller（org.reflections.reflections）
+	2、构建client项目目录结构
+	3、生成DTO类文件（com.squareup.JavaPoet）
+	4、生成Service类文件（com.squareup.JavaPoet、org.freemarker.FreeMarker）
+	5、生成Factory类文件（com.squareup.JavaPoet、org.freemarker.FreeMarker）
+	6、生成Util类文件（org.freemarker.FreeMarker）
+	7、生成Transformer类文件（org.freemarker.FreeMarker）
+	8、生成pom.xml文件（org.freemarker.FreeMarker）
 	
-运行过程：
-生成DTO类文件
-生成Service类文件
-生成Factory类文件
-生成Util类文件
-生成Transformer类文件
-根据模板生成pom.xml文件
+	注意：
+	1.默认扫描名为groupId参数值的包及其子包下面的Controller和DTO，可以自定义包名
+	2.相同路径下原有的同名文件将会被覆盖
 
-注意：
-1.默认扫描名为groupId参数值的包及其子包下面的Controller和DTO，可以自定义包名
-2.相同路径下原有的同名文件将会被覆盖
+● 待改进
+	1、服务发现、负载均衡、重试
+	2、配置pom的distributionManagement
+	3、DTO常量属性初始化，只支持原始类型、包装类和String、Enum
+	4、非@RequestBody修饰的参数，暂不支持自定义的引用类型的属性。可以使用限定路径的方式，比如Role类有User类型的属性user，User类有属性name，那么可以将以下参数“user.name=*”，放置到form或者URL参数中
 
-
-遗留bug
-packagesToScan输入多个packages时，报错
-
-
-还在不断完善中。。。
-1.http.client配置，超时等
-2.服务发现、负载均衡、重试
-
-1、配置pom的distributionManagement
-2、DTO常量属性初始化，只支持原始类型、包装类和String、Enum
-3、非@RequestBody修饰的参数，暂不支持自定义的引用类型的属性。可以使用限定路径的方式，比如Role类有User类型的属性user，User类有属性name，那么可以将以下参数“user.name=*”，放置到form或者URL参数中
-4、客户端在调用时使用反射获取URL和参数数据，会有一定性能损耗，可以增加缓存机制，或者建立数据模型，在生成客户端时就把需要的数据抽取出来
-5、Transformer中切面（Aspect）的切入点（Pointcut）包名，有极少的可能性会跟Spring消费者项目（Consumer）包名冲突
+● 遗留bug
+	packagesToScan配置多个packages时，报错

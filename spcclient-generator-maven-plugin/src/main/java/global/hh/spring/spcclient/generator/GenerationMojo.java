@@ -13,6 +13,7 @@ import java.lang.reflect.WildcardType;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -34,20 +35,17 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.codehaus.plexus.classworlds.realm.ClassRealm;
 import org.reflections.ReflectionUtils;
 import org.reflections.Reflections;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
-import org.springframework.stereotype.Service;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.google.common.base.Defaults;
 import com.google.common.base.Predicate;
-import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ArrayTypeName;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.FieldSpec;
@@ -57,9 +55,9 @@ import com.squareup.javapoet.ParameterSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.TypeSpec.Builder;
 import com.squareup.javapoet.TypeVariableName;
 import com.squareup.javapoet.WildcardTypeName;
-import com.squareup.javapoet.TypeSpec.Builder;
 
 import freemarker.template.Template;
 import global.hh.spring.spcclient.generator.util.FileUtils;
@@ -221,14 +219,52 @@ public class GenerationMojo extends AbstractMojo {
 				serviceClassNames.add(className);
 				Builder serviceTypeSpecBuilder = TypeSpec.classBuilder(serviceName)
 					    .addModifiers(Modifier.PUBLIC)
-					    .addAnnotation(Service.class);
+					    .superclass(ClassName.get(basePkg, "Service"));
 				
 				// service class annotation
+				List<RequestMethod> requestMethodList = null;
+				String classMapping = "";
 				RequestMapping classRequestMappingAnno = controllerClasse.getAnnotation(RequestMapping.class);
 				if (classRequestMappingAnno != null) {
-					AnnotationSpec requestMappingAnnotationSpec = AnnotationSpec.get(classRequestMappingAnno);
-					serviceTypeSpecBuilder.addAnnotation(requestMappingAnnotationSpec);
+					String[] values = classRequestMappingAnno.value();
+					if (values != null) {
+						for (int i = 0; i < values.length; i++) {
+							String value = values[i];
+							if (!StringUtils.isEmpty(value)) {
+								classMapping = value;
+								break;
+							}
+						}
+					}
+					if (StringUtils.isEmpty(classMapping)) {
+						String[] paths = classRequestMappingAnno.path();
+						if (paths != null) {
+							for (int i = 0; i < paths.length; i++) {
+								String path = paths[i];
+								if (!StringUtils.isEmpty(path)) {
+									classMapping = path;
+									break;
+								}
+							}
+						}
+					}
+					
+					RequestMethod[] requestMethods = classRequestMappingAnno.method();
+					if (requestMethods != null && requestMethods.length > 0) {
+						requestMethodList = Arrays.asList(requestMethods);
+					}
+				
 				}
+				
+				// service constructor
+				MethodSpec constructor = MethodSpec.constructorBuilder()
+						.addModifiers(Modifier.PUBLIC)
+						.addParameter(String.class, "dtoPkg")
+						.addParameter(ClassName.get(basePkg, "ServiceFactory"), "factory")
+						.addStatement("this.setDtoPkg(dtoPkg)")
+						.addStatement("this.setFactory(factory)")
+						.build();
+				serviceTypeSpecBuilder.addMethod(constructor);
 				
 				// service method
 				Predicate<Method> methodPredicate = ReflectionUtils.withAnnotation(RequestMapping.class);
@@ -245,14 +281,46 @@ public class GenerationMojo extends AbstractMojo {
 						
 						// service method
 						com.squareup.javapoet.MethodSpec.Builder methodSpecBuilder = MethodSpec.methodBuilder(method.getName())
-								.addModifiers(Modifier.PUBLIC).returns(returnClassName);
+								.addModifiers(Modifier.PUBLIC)
+								.returns(returnClassName)
+								.addException(Exception.class);
 						
 						// service method annotation
+						String methodMapping = "";
 						RequestMapping methodRequestMappingAnno = method.getAnnotation(RequestMapping.class);
-						AnnotationSpec requestMappingAnnotationSpec = AnnotationSpec.get(methodRequestMappingAnno);
-						methodSpecBuilder.addAnnotation(requestMappingAnnotationSpec);
+						String[] values = methodRequestMappingAnno.value();
+						if (values != null) {
+							for (int i = 0; i < values.length; i++) {
+								String value = values[i];
+								if (!StringUtils.isEmpty(value)) {
+									methodMapping = value;
+									break;
+								}
+							}
+						}
+						if (StringUtils.isEmpty(methodMapping)) {
+							String[] paths = methodRequestMappingAnno.path();
+							if (paths != null) {
+								for (int i = 0; i < paths.length; i++) {
+									String path = paths[i];
+									if (!StringUtils.isEmpty(path)) {
+										methodMapping = path;
+										break;
+									}
+								}
+							}
+						}
+						if (CollectionUtils.isEmpty(requestMethodList)) {
+							RequestMethod[] requestMethods = methodRequestMappingAnno.method();
+							if (requestMethods != null && requestMethods.length > 0) {
+								requestMethodList = Arrays.asList(requestMethods);
+							}
+						}
 
 						// service method parameter
+						String argNameWithRequestBody = null;
+						List<String> argNamesWithPathVariable = new ArrayList<>();
+						List<String> argNamesOther = new ArrayList<>();
 						java.lang.reflect.Parameter[] parameters = method.getParameters();
 						if (parameters != null && parameters.length > 0) {
 							List<ParameterSpec> parameterSpecList = new ArrayList<>();
@@ -281,23 +349,14 @@ public class GenerationMojo extends AbstractMojo {
 								com.squareup.javapoet.ParameterSpec.Builder parameterSpecBuilder = ParameterSpec.builder(parameterClassName, name, new Modifier[]{});
 								
 								// service method parameter annotation
-								List<AnnotationSpec> parameterAnnotationSpecList = new ArrayList<>();
 								RequestBody requestBodyAnno = parameter.getAnnotation(RequestBody.class);
 								PathVariable pathVariableAnno = parameter.getAnnotation(PathVariable.class);
-								if (requestParamAnno != null) {
-									AnnotationSpec requestParamAnnoSpec = AnnotationSpec.get(requestParamAnno);
-									parameterAnnotationSpecList.add(requestParamAnnoSpec);
-								}
 								if (requestBodyAnno != null) {
-									AnnotationSpec requestBodyAnnoSpec = AnnotationSpec.get(requestBodyAnno);
-									parameterAnnotationSpecList.add(requestBodyAnnoSpec);
-								}
-								if (pathVariableAnno != null) {
-									AnnotationSpec pathVariableAnnoSpec = AnnotationSpec.get(pathVariableAnno);
-									parameterAnnotationSpecList.add(pathVariableAnnoSpec);
-								}
-								if (!parameterAnnotationSpecList.isEmpty()) {
-									parameterSpecBuilder.addAnnotations(parameterAnnotationSpecList);
+									argNameWithRequestBody = name;
+								} else if (pathVariableAnno != null) {
+									argNamesWithPathVariable.add(name);
+								} else {
+									argNamesOther.add(name);
 								}
 								
 								parameterSpecList.add(parameterSpecBuilder.build());
@@ -306,11 +365,47 @@ public class GenerationMojo extends AbstractMojo {
 						}
 
 						// service method code
-						Class<?> returnClass = method.getReturnType();
-						if (returnClass != void.class) {
-							Object value = Defaults.defaultValue(returnClass);
-							methodSpecBuilder.addStatement("return $L", value);
+						methodSpecBuilder.addStatement("$T<$T> requestMethodList = new $T<>()", List.class, RequestMethod.class, ArrayList.class);
+						if (requestMethodList != null) {
+							for (RequestMethod rm : requestMethodList) {
+								methodSpecBuilder.addStatement("requestMethodList.add($T.$L)", RequestMethod.class, rm.name());
+							}
 						}
+						methodSpecBuilder.addStatement("$T<$T> pathList = new $T<>()", List.class, String.class, ArrayList.class);
+						String[] classPaths = classMapping.split("/");
+						String[] methodPaths = methodMapping.split("/");
+						for (String cp : classPaths) {
+							if (StringUtils.isNotBlank(cp)) {
+								methodSpecBuilder.addStatement("pathList.add($S)", cp);
+							}
+						}
+						for (String mp : methodPaths) {
+							if (StringUtils.isNotBlank(mp)) {
+								methodSpecBuilder.addStatement("pathList.add($S)", mp);
+							}
+						}
+						methodSpecBuilder.addStatement("$T<$T> argNamesWithPathVariable = new $T<>()", List.class, Object.class, ArrayList.class);
+						if (argNamesWithPathVariable != null) {
+							for (String an : argNamesWithPathVariable) {
+								methodSpecBuilder.addStatement("argNamesWithPathVariable.add($L)", an);
+							}
+						}
+						methodSpecBuilder.addStatement("$T<$T, $T> argNamesOther = new $T<>()", Map.class, String.class, Object.class, HashMap.class);
+						if (argNamesOther != null) {
+							for (String an : argNamesOther) {
+								methodSpecBuilder.addStatement("argNamesOther.put($S, $L)", an, an);
+							}
+						}
+						ClassName transformerClassName = ClassName.get(basePkg, "Transformer");
+						Class<?> returnClass = method.getReturnType();
+						String lastStatement = "";
+						if (returnClass != void.class) {
+							lastStatement = "return ";
+						}
+						methodSpecBuilder.addStatement(
+								lastStatement
+										+ "$T.transform(getDtoPkg(), getFactory(), requestMethodList, pathList, $L, argNamesWithPathVariable, argNamesOther, $T.class)",
+								transformerClassName, argNameWithRequestBody, dtoClassNameMap.get(returnClass));
 						
 						serviceTypeSpecBuilder.addMethod(methodSpecBuilder.build());
 					}
@@ -324,6 +419,7 @@ public class GenerationMojo extends AbstractMojo {
 			outputJavaFiles(srcDirFile, dtoJavaFileMap.values());
 			
 			// GENERATE Services
+			genService();
 			outputJavaFiles(srcDirFile, serviceJavaFiles);
 			
 			// GENERATE Factory
@@ -588,13 +684,19 @@ public class GenerationMojo extends AbstractMojo {
 		builder.addField(basePathBuilder.build());
 
 		for (ClassName className : serviceClassNames) {
-			com.squareup.javapoet.FieldSpec.Builder fieldSpecBuilder = FieldSpec.builder(className, StringUtils.capitalize(className.simpleName()), Modifier.PRIVATE)
-					.addAnnotation(Autowired.class);
+			com.squareup.javapoet.FieldSpec.Builder fieldSpecBuilder = FieldSpec.builder(className, StringUtils.uncapitalize(className.simpleName()), Modifier.PRIVATE)
+					.initializer("new $T($S, this)", className, dtoPkg);
 			builder.addField(fieldSpecBuilder.build());
 		}
 		TypeSpec typeSpec = builder.build();
 		JavaFile javaFile = JavaFile.builder(basePkg, typeSpec).build();
 		outputJavaFile(srcDirFile, javaFile);
+	}
+	
+	private void genService() throws Exception {
+		Map<String, Object> root = new HashMap<>();
+		root.put("package", basePkg);
+		outputFileFromTemplate(basePkgFile, TemplateUtils.TEMPLATE_NAME_SERVICE, root);
 	}
 	
 	private void genUtil() throws Exception {
@@ -606,8 +708,6 @@ public class GenerationMojo extends AbstractMojo {
 	private void genTransformer() throws Exception {
 		Map<String, Object> root = new HashMap<>();
 		root.put("package", basePkg);
-		root.put("dtoPackage", dtoPkg);
-		root.put("servicePackage", servicePkg);
 		outputFileFromTemplate(basePkgFile, TemplateUtils.TEMPLATE_NAME_TRANSFORMER, root);
 	}
 	

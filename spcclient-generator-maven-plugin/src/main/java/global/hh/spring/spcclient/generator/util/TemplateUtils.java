@@ -14,6 +14,8 @@ public final class TemplateUtils {
 	
 	public static final String TEMPLATE_NAME_POM = "pom.xml" + TEMPLATE_NAME_POSTFIX;
 	
+	public static final String TEMPLATE_NAME_SERVICE = "Service.java" + TEMPLATE_NAME_POSTFIX;
+	
 	public static final String TEMPLATE_NAME_SERVICE_FACTORY = "ServiceFactory.java" + TEMPLATE_NAME_POSTFIX;
 	
 	public static final String TEMPLATE_NAME_UTILS = "Utils.java" + TEMPLATE_NAME_POSTFIX;
