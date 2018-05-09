@@ -5,14 +5,20 @@ import java.net.URI;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
 
+import org.apache.http.HttpRequest;
+import org.apache.http.client.HttpRequestRetryHandler;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
@@ -21,6 +27,7 @@ import org.apache.http.conn.socket.PlainConnectionSocketFactory;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.ssl.SSLContextBuilder;
@@ -86,6 +93,31 @@ public class Transformer {
 		connMgr.setMaxTotal(200);
 		connMgr.setDefaultMaxPerRoute(100);
 		b.setConnectionManager(connMgr);
+		
+		// 重试（相对于StandardHttpRequestRetryHandler，此匿名类允许对已经成功发送的请求以及发生UnknownHostException、InterruptedIOException、ConnectException的请求进行重试）
+		HttpRequestRetryHandler retryHandler = new DefaultHttpRequestRetryHandler(3, true,
+				Arrays.asList(SSLException.class)) {
+
+			private final Map<String, Boolean> idempotentMethods;
+
+			{
+				this.idempotentMethods = new ConcurrentHashMap<String, Boolean>();
+				this.idempotentMethods.put("GET", Boolean.TRUE);
+				this.idempotentMethods.put("HEAD", Boolean.TRUE);
+				this.idempotentMethods.put("PUT", Boolean.TRUE);
+				this.idempotentMethods.put("DELETE", Boolean.TRUE);
+				this.idempotentMethods.put("OPTIONS", Boolean.TRUE);
+				this.idempotentMethods.put("TRACE", Boolean.TRUE);
+			}
+
+			@Override
+			protected boolean handleAsIdempotent(final HttpRequest request) {
+				final String method = request.getRequestLine().getMethod().toUpperCase(Locale.ROOT);
+				final Boolean b = this.idempotentMethods.get(method);
+				return b != null && b.booleanValue();
+			}
+		};
+		b.setRetryHandler(retryHandler);
 
 		// 生成httpclient
 		CloseableHttpClient httpClient = b.build();
@@ -103,7 +135,7 @@ public class Transformer {
 				.path("/");
 		
 		HttpEntity<?> httpEntity = argNameWithRequestBody != null ? new HttpEntity<>(argNameWithRequestBody) : null;
-		if (CollectionUtils.isEmpty(argNamesOther)) {
+		if (!CollectionUtils.isEmpty(argNamesOther)) {
 			for (Iterator<String> it = argNamesOther.keySet().iterator(); it.hasNext(); ) {
 				String name = it.next();
 				Object arg = argNamesOther.get(name);

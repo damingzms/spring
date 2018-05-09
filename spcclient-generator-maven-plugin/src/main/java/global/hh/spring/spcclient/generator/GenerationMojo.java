@@ -25,6 +25,7 @@ import javax.lang.model.element.Modifier;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.text.WordUtils;
+import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.descriptor.PluginDescriptor;
@@ -148,9 +149,9 @@ public class GenerationMojo extends AbstractMojo {
 	private String servicePkg;
 	
 	/**
-	 * Value中的“-”和“_”符号会删除，单词首字母自动大写
+	 * Value中的“-”和“_”符号会删除，单词首字母自动大写。默认值：artifactId去掉“-client”的部分，以“ServiceFactory”结尾
      */
-	@Parameter(defaultValue = "${project.artifactId}ServiceFactory", required = true)
+	@Parameter
 	private String factoryClassName;
 	
 	private File basePkgFile;
@@ -167,6 +168,7 @@ public class GenerationMojo extends AbstractMojo {
 		basePkg = basePkg.replaceAll("[-, _]", ".");
 		dtoPkg = basePkg + ".dto";
 		servicePkg = basePkg + ".service";
+		factoryClassName = artifactId.replace("-client", "").concat("ServiceFactory");
 		factoryClassName = WordUtils.capitalize(factoryClassName, '-', '_').replaceAll("[-, _]", "");
 		
 		try {
@@ -195,11 +197,11 @@ public class GenerationMojo extends AbstractMojo {
 			List<ClassName> serviceClassNames = new ArrayList<>();
 			Map<String, Integer> dtoNameCountMap = new HashMap<>();
 			Map<String, Integer> serviceNameCountMap = new HashMap<>();
-			for (Class<?> controllerClasse : controllerClasses) {
+			for (Class<?> controllerClass : controllerClasses) {
 				
 				// SERVICE
 				// service class
-				String serviceName = controllerClasse.getSimpleName();
+				String serviceName = controllerClass.getSimpleName();
 				if (serviceName.endsWith("Controller")) {
 					serviceName = serviceName.substring(0, serviceName.lastIndexOf("Controller"));
 				} 
@@ -222,9 +224,9 @@ public class GenerationMojo extends AbstractMojo {
 					    .superclass(ClassName.get(basePkg, "Service"));
 				
 				// service class annotation
-				List<RequestMethod> requestMethodList = null;
+				List<RequestMethod> classRequestMethodList = null;
 				String classMapping = "";
-				RequestMapping classRequestMappingAnno = controllerClasse.getAnnotation(RequestMapping.class);
+				RequestMapping classRequestMappingAnno = controllerClass.getAnnotation(RequestMapping.class);
 				if (classRequestMappingAnno != null) {
 					String[] values = classRequestMappingAnno.value();
 					if (values != null) {
@@ -251,7 +253,7 @@ public class GenerationMojo extends AbstractMojo {
 					
 					RequestMethod[] requestMethods = classRequestMappingAnno.method();
 					if (requestMethods != null && requestMethods.length > 0) {
-						requestMethodList = Arrays.asList(requestMethods);
+						classRequestMethodList = Arrays.asList(requestMethods);
 					}
 				
 				}
@@ -269,15 +271,15 @@ public class GenerationMojo extends AbstractMojo {
 				// service method
 				Predicate<Method> methodPredicate = ReflectionUtils.withAnnotation(RequestMapping.class);
 				@SuppressWarnings("unchecked")
-				Set<Method> methods = ReflectionUtils.getMethods(controllerClasse, methodPredicate);
+				Set<Method> methods = ReflectionUtils.getMethods(controllerClass, methodPredicate);
 				if (CollectionUtils.isEmpty(methods)) {
-					log.warn("Cannot find any mapping method in class: " + controllerClasse.getName());
+					log.warn("Cannot find any mapping method in class: " + controllerClass.getName());
 				} else {
 					for (Method method : methods) {
 						
 						// RESPONSE DTO
 						Type returnType = method.getGenericReturnType();
-						TypeName returnClassName = genDtoJavaFile(dtoJavaFileMap, dtoClassNameMap, dtoNameCountMap, returnType);;
+						TypeName returnClassName = genDtoJavaFile(dtoJavaFileMap, dtoClassNameMap, dtoNameCountMap, returnType);
 						
 						// service method
 						com.squareup.javapoet.MethodSpec.Builder methodSpecBuilder = MethodSpec.methodBuilder(method.getName())
@@ -310,11 +312,14 @@ public class GenerationMojo extends AbstractMojo {
 								}
 							}
 						}
-						if (CollectionUtils.isEmpty(requestMethodList)) {
+						List<RequestMethod> requestMethodList = new ArrayList<>();
+						if (CollectionUtils.isEmpty(classRequestMethodList)) {
 							RequestMethod[] requestMethods = methodRequestMappingAnno.method();
 							if (requestMethods != null && requestMethods.length > 0) {
 								requestMethodList = Arrays.asList(requestMethods);
 							}
+						} else {
+							requestMethodList.addAll(classRequestMethodList);
 						}
 
 						// service method parameter
@@ -340,7 +345,7 @@ public class GenerationMojo extends AbstractMojo {
 										name = requestParamAnno.name();
 									}
 								}
-								if (i == 0) {
+								if (i == 0 && StringUtils.isEmpty(name)) {
 									name = "request";
 								}
 								if (StringUtils.isEmpty(name)) {
@@ -402,10 +407,11 @@ public class GenerationMojo extends AbstractMojo {
 						if (returnClass != void.class) {
 							lastStatement = "return ";
 						}
+						Object actualRetClName = dtoClassNameMap.get(returnClass) == null ? returnClassName : dtoClassNameMap.get(returnClass);
 						methodSpecBuilder.addStatement(
 								lastStatement
 										+ "$T.transform(getDtoPkg(), getFactory(), requestMethodList, pathList, $L, argNamesWithPathVariable, argNamesOther, $T.class)",
-								transformerClassName, argNameWithRequestBody, dtoClassNameMap.get(returnClass));
+								transformerClassName, argNameWithRequestBody, actualRetClName);
 						
 						serviceTypeSpecBuilder.addMethod(methodSpecBuilder.build());
 					}
@@ -716,6 +722,19 @@ public class GenerationMojo extends AbstractMojo {
 		root.put("groupId", groupId);
 		root.put("artifactId", artifactId);
 		root.put("version", version);
+
+		StringBuilder dpds = new StringBuilder();
+		List<Dependency> dependencies = pluginDescriptor.getPlugin().getDependencies();
+		if (!CollectionUtils.isEmpty(dependencies)) {
+			for (Dependency d : dependencies) {
+				dpds.append("\t\t<dependency>\n")
+					.append("\t\t\t<groupId>").append(d.getGroupId()).append("</groupId>\n")
+					.append("\t\t\t<artifactId>").append(d.getArtifactId()).append("</artifactId>\n")
+					.append("\t\t\t<version>").append(d.getVersion()).append("</version>\n")
+					.append("\t\t</dependency>\n");
+			}
+		}
+		root.put("dependencies", dpds.toString());
 		outputFileFromTemplate(baseDirFile, TemplateUtils.TEMPLATE_NAME_POM, root);
 	}
 
