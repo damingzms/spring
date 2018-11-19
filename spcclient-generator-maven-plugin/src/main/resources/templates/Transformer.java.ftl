@@ -34,7 +34,9 @@ import org.apache.http.ssl.SSLContextBuilder;
 import org.apache.http.ssl.TrustStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StopWatch;
@@ -102,6 +104,7 @@ public class Transformer {
 
 			{
 				this.idempotentMethods = new ConcurrentHashMap<String, Boolean>();
+${idempotentMethods}
 				this.idempotentMethods.put("GET", Boolean.TRUE);
 				this.idempotentMethods.put("HEAD", Boolean.TRUE);
 				this.idempotentMethods.put("PUT", Boolean.TRUE);
@@ -126,7 +129,7 @@ public class Transformer {
 	}
 
 	public static <T> T transform(String dtoPkg, ServiceFactory factory, List<RequestMethod> requestMethodList, List<String> pathList,
-			Object argNameWithRequestBody, List<Object> argNamesWithPathVariable, Map<String, Object> argNamesOther, Class<T> responseType)
+			Object argNameWithRequestBody, List<Object> argNamesWithPathVariable, Map<String, Object> argNamesOther, ParameterizedTypeReference<T> responseType)
 			throws Exception {
 		UriComponentsBuilder builder = UriComponentsBuilder.newInstance()
 				.scheme(factory.getProtocol()).host(factory.getHost()).port(factory.getPort())
@@ -181,16 +184,17 @@ public class Transformer {
 		LOG.info("调用接口，URI = {}，RequestBody = {}", uri.toString(), httpEntity != null ? Utils.toJson(httpEntity.getBody()) : null);
 		StopWatch watch = new StopWatch();
 		watch.start();
-		T result = null;
+		HttpMethod method = null;
 		if (requestMethodList == null || requestMethodList.contains(RequestMethod.POST)) {
-			result = REST_TEMPLATE.postForObject(uri, httpEntity, responseType);
+			method = HttpMethod.POST;
 		} else if (requestMethodList.contains(RequestMethod.GET)) {
-			result = REST_TEMPLATE.getForObject(uri, responseType);
+			method = HttpMethod.GET;
 		} else if (requestMethodList.contains(RequestMethod.DELETE)) {
-			REST_TEMPLATE.delete(uri);
+			method = HttpMethod.DELETE;
 		} else {
 			throw new RuntimeException("Request method not support: " + requestMethodList);
 		}
+		T result = REST_TEMPLATE.exchange(uri, method, httpEntity, responseType).getBody();
 		watch.stop();
 		LOG.info("接口返回，耗时 = {}，RequestBody = {}", watch.getTotalTimeMillis(), result != null ? Utils.toJson(result) : null);
 		return result;

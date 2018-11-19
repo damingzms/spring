@@ -23,6 +23,7 @@ import java.util.Set;
 
 import javax.lang.model.element.Modifier;
 
+import org.apache.commons.lang3.ClassUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.text.WordUtils;
 import org.apache.maven.model.Dependency;
@@ -36,8 +37,8 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.codehaus.plexus.classworlds.realm.ClassRealm;
 import org.reflections.ReflectionUtils;
 import org.reflections.Reflections;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Controller;
-import org.springframework.util.ClassUtils;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -131,9 +132,9 @@ public class GenerationMojo extends AbstractMojo {
 	private String srcDir;
 	
 	/**
-	 * 基础包名。Value中的“-”和“_”符号会替换成“.”
+	 * 基础包名。Value中的“-”和“_”符号会替换成“.”。默认值：{groupId}.{artifactId}
      */
-	@Parameter(defaultValue = "${project.groupId}.${project.artifactId}.client", required = true)
+	@Parameter
 	private String basePkg;
 	
 	/**
@@ -153,6 +154,12 @@ public class GenerationMojo extends AbstractMojo {
      */
 	@Parameter
 	private String factoryClassName;
+
+	/**
+	 * 是否重试POST请求
+     */
+	@Parameter(defaultValue = "false")
+	private Boolean postRetrying;
 	
 	private File basePkgFile;
 	
@@ -165,10 +172,19 @@ public class GenerationMojo extends AbstractMojo {
 		log.info("Generating Spring Cloud client project.");
 		
 		// PREPARE
+		if (StringUtils.isBlank(basePkg)) {
+			basePkg = groupId + "." + artifactId;
+		}
 		basePkg = basePkg.replaceAll("[-, _]", ".");
-		dtoPkg = basePkg + ".dto";
-		servicePkg = basePkg + ".service";
-		factoryClassName = artifactId.replace("-client", "").concat("ServiceFactory");
+		if (StringUtils.isBlank(dtoPkg)) {
+			dtoPkg = basePkg + ".dto";
+		}
+		if (StringUtils.isBlank(servicePkg)) {
+			servicePkg = basePkg + ".service";
+		}
+		if (StringUtils.isBlank(factoryClassName)) {
+			factoryClassName = artifactId.replace("-client", "").concat("ServiceFactory");
+		}
 		factoryClassName = WordUtils.capitalize(factoryClassName, '-', '_').replaceAll("[-, _]", "");
 		
 		try {
@@ -401,17 +417,23 @@ public class GenerationMojo extends AbstractMojo {
 								methodSpecBuilder.addStatement("argNamesOther.put($S, $L)", an, an);
 							}
 						}
-						ClassName transformerClassName = ClassName.get(basePkg, "Transformer");
 						Class<?> returnClass = method.getReturnType();
+						Object returnClassWrapper = null;
+						if (returnClass == void.class) {
+							returnClassWrapper = Void.class;
+						} else {
+							returnClassWrapper = ClassUtils.isPrimitiveOrWrapper(returnClass) ? ClassUtils.primitiveToWrapper(returnClass) : returnClassName;
+						}
+						methodSpecBuilder.addStatement("$T<$T> responseType = new $T<$T>() {}", ParameterizedTypeReference.class, returnClassWrapper, ParameterizedTypeReference.class, returnClassWrapper);
+						ClassName transformerClassName = ClassName.get(basePkg, "Transformer");
 						String lastStatement = "";
 						if (returnClass != void.class) {
 							lastStatement = "return ";
 						}
-						Object actualRetClName = dtoClassNameMap.get(returnClass) == null ? returnClassName : dtoClassNameMap.get(returnClass);
 						methodSpecBuilder.addStatement(
 								lastStatement
-										+ "$T.transform(getDtoPkg(), getFactory(), requestMethodList, pathList, $L, argNamesWithPathVariable, argNamesOther, $T.class)",
-								transformerClassName, argNameWithRequestBody, actualRetClName);
+										+ "$T.transform(getDtoPkg(), getFactory(), requestMethodList, pathList, $L, argNamesWithPathVariable, argNamesOther, responseType)",
+								transformerClassName, argNameWithRequestBody);
 						
 						serviceTypeSpecBuilder.addMethod(methodSpecBuilder.build());
 					}
@@ -461,6 +483,7 @@ public class GenerationMojo extends AbstractMojo {
 	}
 	
 	private TypeName genDtoJavaFile(Map<Class<?>, JavaFile> javaFileMap, Map<Class<?>, ClassName> classNameMap, Map<String, Integer> nameCountMap, Type type) throws Exception {
+		Log log = getLog();
 		Class<?> clazz = null;
 		if (type instanceof Class<?>) {
 			clazz = (Class<?>) type;
@@ -602,15 +625,21 @@ public class GenerationMojo extends AbstractMojo {
 				
 				com.squareup.javapoet.FieldSpec.Builder fieldSpecBuilder = FieldSpec.builder(fieldClassName, name, modifierList.toArray(new Modifier[]{}));
 				
-				// value，只支持静态成员属性，只支持原始类型、包装类和、String、Enum
-				if (modifierList.contains(Modifier.STATIC)) {
+				// value，只支持静态、常量成员属性，只支持原始类型、包装类和、String、Enum
+				if (modifierList.contains(Modifier.STATIC) || modifierList.contains(Modifier.FINAL)) {
 					Class<?> fieldClass = field.getType();
-					Object value = field.get(null);
+					Object value = null;
+					try {
+						value = field.get(null);
+					} catch (IllegalAccessException e) {
+						log.warn(e.getMessage());
+						continue;
+					}
 					if (value != null) {
 						if (fieldClass == String.class) {
 							fieldSpecBuilder.initializer("$S", value);
 						} else if (ClassUtils.isPrimitiveOrWrapper(fieldClass)) {
-							fieldSpecBuilder.initializer("new $T($S)", ClassUtils.resolvePrimitiveIfNecessary(fieldClass), value.toString());
+							fieldSpecBuilder.initializer("new $T($S)", ClassUtils.primitiveToWrapper(fieldClass), value.toString());
 						} else if (fieldClass.getSuperclass() == Enum.class) {
 							fieldSpecBuilder.initializer("$T.$L", fieldClassName, ((Enum<?>) value).name());
 						}
@@ -643,7 +672,7 @@ public class GenerationMojo extends AbstractMojo {
 									args.add(value);
 								} else if (ClassUtils.isPrimitiveOrWrapper(fieldClass)) {
 									formats.add("new $T($S)");
-									args.add(ClassUtils.resolvePrimitiveIfNecessary(fieldClass));
+									args.add(ClassUtils.primitiveToWrapper(fieldClass));
 									args.add(value.toString());
 								} else if (fieldClass.getSuperclass() == Enum.class) {
 									formats.add("$T.$L");
@@ -714,6 +743,11 @@ public class GenerationMojo extends AbstractMojo {
 	private void genTransformer() throws Exception {
 		Map<String, Object> root = new HashMap<>();
 		root.put("package", basePkg);
+		String idempotentMethods = "";
+		if (postRetrying != null && postRetrying) {
+			idempotentMethods = "\t\t\t\tthis.idempotentMethods.put(\"POST\", Boolean.TRUE);";
+		}
+		root.put("idempotentMethods", idempotentMethods);
 		outputFileFromTemplate(basePkgFile, TemplateUtils.TEMPLATE_NAME_TRANSFORMER, root);
 	}
 	
@@ -726,6 +760,7 @@ public class GenerationMojo extends AbstractMojo {
 		StringBuilder dpds = new StringBuilder();
 		List<Dependency> dependencies = pluginDescriptor.getPlugin().getDependencies();
 		if (!CollectionUtils.isEmpty(dependencies)) {
+			dpds.append("\n");
 			for (Dependency d : dependencies) {
 				dpds.append("\t\t<dependency>\n")
 					.append("\t\t\t<groupId>").append(d.getGroupId()).append("</groupId>\n")
